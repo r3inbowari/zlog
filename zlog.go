@@ -2,6 +2,7 @@ package zlog
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"github.com/fatih/color"
 	rotate "github.com/r3inbowari/zlog/file-rotatelogs"
@@ -9,7 +10,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -68,30 +68,30 @@ func NewLogger() *ZLog {
 	return &z
 }
 
-func (f *ZLog) SetExitFunc(fn func(i int)) *ZLog {
-	f.ExitFunc = fn
-	return f
+func (z *ZLog) SetExitFunc(fn func(i int)) *ZLog {
+	z.ExitFunc = fn
+	return z
 }
 
-func (f *ZLog) SetBuildMode(buildMode string) *ZLog {
-	f.BuildMode = strings.ToLower(buildMode)
-	return f
+func (z *ZLog) SetBuildMode(buildMode string) *ZLog {
+	z.BuildMode = strings.ToLower(buildMode)
+	return z
 }
 
-func (f *ZLog) SetLevelColor(level logrus.Level, attribute color.Attribute) *ZLog {
-	f.fm.Lock()
-	defer f.fm.Unlock()
-	f.levelColor[LevelArray[level%7]] = attribute
-	return f
+func (z *ZLog) SetLevelColor(level logrus.Level, attribute color.Attribute) *ZLog {
+	z.fm.Lock()
+	defer z.fm.Unlock()
+	z.levelColor[LevelArray[level%7]] = attribute
+	return z
 }
 
-func (f *ZLog) SetRotate(rotateEnable bool) *ZLog {
-	f.fm.Lock()
-	defer f.fm.Unlock()
+func (z *ZLog) SetRotate(rotateEnable bool) *ZLog {
+	z.fm.Lock()
+	defer z.fm.Unlock()
 	if rotateEnable {
 		p, err := os.Executable()
 		if err != nil {
-			return f
+			return z
 		}
 		p = filepath.Dir(p) + "\\log\\"
 		if rotateEnable {
@@ -101,79 +101,56 @@ func (f *ZLog) SetRotate(rotateEnable bool) *ZLog {
 				rotate.WithMaxAge(time.Duration(180)*time.Second),
 				rotate.WithRotationTime(time.Duration(60)*time.Second),
 			)
-			f.Rotate = writer
+			z.Rotate = writer
 		}
 	} else {
-		f.Rotate = nil
+		z.Rotate = nil
 	}
-	f.RotateEnable = rotateEnable
-	return f
+	z.RotateEnable = rotateEnable
+	return z
 }
 
-func (f *ZLog) Blue(msg string) {
-	if f.BuildMode == "rel" {
+func (z *ZLog) Blue(msg string) {
+	if z.BuildMode == "rel" {
 		color.Blue(msg)
 	} else {
 		fmt.Printf("\x1b[%dm"+msg+" \x1b[0m\n", 34)
 	}
 }
 
+func (z *ZLog) WithTag(tag string) *logrus.Entry {
+	return z.WithField("aGVsbG8=", tag)
+}
+
 // Write implement the Output Writer interface
-func (f *ZLog) Write(p []byte) (n int, err error) {
-	if f.BuildMode == "rel" {
-		n, err = color.New(f.levelColor[string(p[1])]).Println(string(p))
+func (z *ZLog) Write(p []byte) (n int, err error) {
+	if z.BuildMode == "rel" {
+		n, err = color.New(z.levelColor[string(p[1])]).Println(string(p))
 	} else {
-		n, err = fmt.Printf("\x1b[%dm"+string(p)+" \x1b[0m\n", f.levelColor[string(p[1])])
+		n, err = fmt.Printf("\x1b[%dm"+string(p)+" \x1b[0m\n", z.levelColor[string(p[1])])
 	}
-	if !f.RotateEnable {
+	if !z.RotateEnable {
 		return
 	}
-	return f.Rotate.Write(p)
+	return z.Rotate.Write(p)
 }
 
 // Format implement the Formatter interface
-func (f *ZLog) Format(entry *logrus.Entry) ([]byte, error) {
+func (z *ZLog) Format(entry *logrus.Entry) ([]byte, error) {
 	var b *bytes.Buffer
 	if entry.Buffer != nil {
 		b = entry.Buffer
 	} else {
 		b = &bytes.Buffer{}
 	}
-	remained := len(entry.Data)
-	if remained > 0 {
-		entry.Message += " ["
+	if v, ok := entry.Data["aGVsbG8="]; ok {
+		entry.Message = fmt.Sprintf("[%s] %s", v, entry.Message)
+		delete(entry.Data, "aGVsbG8=")
 	}
-	for k, v := range entry.Data {
-		entry.Message += k + ":" + fieldParse(v)
-		remained--
-		if remained != 0 {
-			entry.Message += ", "
-		} else {
-			entry.Message += "]"
-		}
-	}
+	params := MapToJson(entry.Data)
 	filename := path.Base(entry.Caller.File)
-	b.WriteString(fmt.Sprintf("[%s] %s [%s:%d] %s", LevelArray[entry.Level], entry.Time.Format("2006-01-02 15:04:05"), filename, entry.Caller.Line, entry.Message))
+	b.WriteString(fmt.Sprintf("[%s] %s [%s:%d] %s %s", LevelArray[entry.Level], entry.Time.Format("2006-01-02 15:04:05"), filename, entry.Caller.Line, entry.Message, params))
 	return b.Bytes(), nil
-}
-
-func fieldParse(obj interface{}) string {
-	var ret string
-	switch v := obj.(type) {
-	case string:
-		ret = v
-	case float64:
-		ret = strconv.FormatFloat(v, 'E', -1, 64)
-	case int:
-		ret = strconv.Itoa(v)
-	case int64:
-		ret = strconv.FormatInt(v, 0x0a)
-	case nil:
-		ret = "nil"
-	default:
-		ret = "unsupported"
-	}
-	return ret
 }
 
 var Log *ZLog
@@ -183,4 +160,12 @@ func InitGlobalLogger() *ZLog {
 		Log = NewLogger()
 	}
 	return Log
+}
+
+func MapToJson(param map[string]interface{}) string {
+	data, _ := json.Marshal(param)
+	if bytes.Equal(data, []byte{123, 125}) {
+		return ""
+	}
+	return string(data)
 }
