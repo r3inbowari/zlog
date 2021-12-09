@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -67,27 +68,30 @@ func NewLogger() *ZLog {
 	return &z
 }
 
-func (f *ZLog) SetExitFunc(fn func(i int)) {
+func (f *ZLog) SetExitFunc(fn func(i int)) *ZLog {
 	f.ExitFunc = fn
+	return f
 }
 
-func (f *ZLog) SetBuildMode(buildMode string) {
-	f.BuildMode = buildMode
+func (f *ZLog) SetBuildMode(buildMode string) *ZLog {
+	f.BuildMode = strings.ToLower(buildMode)
+	return f
 }
 
-func (f *ZLog) SetLevelColor(level logrus.Level, attribute color.Attribute) {
+func (f *ZLog) SetLevelColor(level logrus.Level, attribute color.Attribute) *ZLog {
 	f.fm.Lock()
 	defer f.fm.Unlock()
 	f.levelColor[LevelArray[level%7]] = attribute
+	return f
 }
 
-func (f *ZLog) SetRotate(rotateEnable bool) {
+func (f *ZLog) SetRotate(rotateEnable bool) *ZLog {
 	f.fm.Lock()
 	defer f.fm.Unlock()
 	if rotateEnable {
 		p, err := os.Executable()
 		if err != nil {
-			return
+			return f
 		}
 		p = filepath.Dir(p) + "\\log\\"
 		if rotateEnable {
@@ -103,6 +107,7 @@ func (f *ZLog) SetRotate(rotateEnable bool) {
 		f.Rotate = nil
 	}
 	f.RotateEnable = rotateEnable
+	return f
 }
 
 func (f *ZLog) Blue(msg string) {
