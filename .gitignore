@@ -1,3 +1,4 @@
 .idea
 cmd.*
 cmd/log
+log

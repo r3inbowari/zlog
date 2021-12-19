@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/fatih/color"
+	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 	rotate "github.com/r3inbowari/zlog/file-rotatelogs"
 	"github.com/sirupsen/logrus"
+	"net/http"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -47,13 +49,17 @@ var defaultLevelColor = Color{
 	"T": color.FgHiWhite,
 }
 
+// ZLog Todo implement a option?
 type ZLog struct {
 	logrus.Logger
-	BuildMode    string
-	Rotate       *rotate.RotateLogs
-	RotateEnable bool
-	fm           logrus.MutexWrap
-	levelColor   Color
+	BuildMode       string
+	Rotate          *rotate.RotateLogs
+	RotateEnable    bool
+	fm              logrus.MutexWrap
+	levelColor      Color
+	ScreenEnable    bool
+	WebsocketConn   *websocket.Conn
+	WebsocketEnable bool
 }
 
 func NewLogger() *ZLog {
@@ -65,7 +71,27 @@ func NewLogger() *ZLog {
 	z.SetFormatter(&z)
 	z.SetOutput(&z)
 	z.SetReportCaller(true)
+
+	r := gin.Default()
+	r.GET("/log", logBuild(&z))
+	go r.Run(":6564")
+
 	return &z
+}
+
+func logBuild(l *ZLog) gin.HandlerFunc {
+	var upGrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+	return func(context *gin.Context) {
+		conn, err := upGrader.Upgrade(context.Writer, context.Request, nil)
+		if err != nil {
+			return
+		}
+		l.SetWebsocket(conn)
+	}
 }
 
 func (z *ZLog) SetExitFunc(fn func(i int)) *ZLog {
@@ -85,15 +111,26 @@ func (z *ZLog) SetLevelColor(level logrus.Level, attribute color.Attribute) *ZLo
 	return z
 }
 
+func (z *ZLog) SetWebsocket(conn *websocket.Conn) *ZLog {
+	z.fm.Lock()
+	defer z.fm.Unlock()
+	z.WebsocketEnable = false
+	z.WebsocketConn = conn
+	z.WebsocketEnable = true
+	return z
+}
+
 func (z *ZLog) SetRotate(rotateEnable bool) *ZLog {
 	z.fm.Lock()
 	defer z.fm.Unlock()
 	if rotateEnable {
-		p, err := os.Executable()
-		if err != nil {
-			return z
-		}
-		p = filepath.Dir(p) + "\\log\\"
+		//p, err := os.Executable()
+		//if err != nil {
+		//	return z
+		//}
+		//p = filepath.Dir(p) + "\\log\\"
+		p := ".\\log\\"
+
 		if rotateEnable {
 			writer, _ := rotate.New(
 				p+"%Y%m%d%H%M.log",
@@ -107,6 +144,11 @@ func (z *ZLog) SetRotate(rotateEnable bool) *ZLog {
 		z.Rotate = nil
 	}
 	z.RotateEnable = rotateEnable
+	return z
+}
+
+func (z *ZLog) SetScreen(screenEnable bool) *ZLog {
+	z.ScreenEnable = screenEnable
 	return z
 }
 
@@ -124,19 +166,32 @@ func (z *ZLog) WithTag(tag string) *logrus.Entry {
 
 // Write implement the Output Writer interface
 func (z *ZLog) Write(p []byte) (n int, err error) {
-	if z.BuildMode == "rel" {
-		n, err = color.New(z.levelColor[string(p[1])]).Println(string(p))
-	} else {
-		n, err = fmt.Printf("\x1b[%dm"+string(p)+" \x1b[0m\n", z.levelColor[string(p[1])])
+	if z.ScreenEnable {
+		if z.BuildMode == "rel" {
+			n, err = color.New(z.levelColor[string(p[1])]).Println(string(p))
+		} else {
+			n, err = fmt.Printf("\x1b[%dm"+string(p)+" \x1b[0m\n", z.levelColor[string(p[1])])
+		}
 	}
-	if !z.RotateEnable {
-		return
+	if z.RotateEnable {
+		n, err = z.Rotate.Write(p)
 	}
-	return z.Rotate.Write(p)
+
+	if z.WebsocketEnable {
+		n = len(p)
+		err = z.WebsocketConn.WriteMessage(websocket.TextMessage, p)
+		if err != nil {
+			z.WebsocketEnable = false
+		}
+	}
+	return
 }
 
 // Format implement the Formatter interface
 func (z *ZLog) Format(entry *logrus.Entry) ([]byte, error) {
+	if z.RotateEnable == false && z.ScreenEnable == false {
+		return []byte{}, nil
+	}
 	var b *bytes.Buffer
 	if entry.Buffer != nil {
 		b = entry.Buffer

@@ -68,3 +68,19 @@ func TestMap(t *testing.T) {
 	b := map[string]interface{}{}
 	println(zlog.MapToJson(b))
 }
+
+func TestScreenSwitch(t *testing.T) {
+	zlog.InitGlobalLogger()
+	zlog.Log.SetScreen(false)
+	zlog.Log.Info("not display")
+}
+
+func BenchmarkSwitch(b *testing.B) {
+	zlog.InitGlobalLogger()
+	zlog.Log.SetLevel(0)
+	//zlog.Log.SetScreen(false)
+	//zlog.Log.SetRotate(true)
+	for i := 0; i < b.N; i++ {
+		zlog.Log.Info("not display")
+	}
+}
