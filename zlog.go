@@ -7,12 +7,12 @@ import (
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/r3inbowari/common"
 	rotate "github.com/r3inbowari/zlog/file-rotatelogs"
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"os"
 	"path"
-	"strings"
 	"time"
 )
 
@@ -52,7 +52,7 @@ var defaultLevelColor = Color{
 // ZLog Todo implement a option?
 type ZLog struct {
 	logrus.Logger
-	BuildMode       string
+	BuildMode       common.Mode
 	Rotate          *rotate.RotateLogs
 	RotateEnable    bool
 	fm              logrus.MutexWrap
@@ -66,7 +66,7 @@ func NewLogger() *ZLog {
 	var z ZLog
 	z.levelColor = defaultLevelColor
 	z.SetExitFunc(os.Exit)
-	z.SetBuildMode("rel")
+	z.SetBuildMode(common.REL)
 	z.SetLevel(logrus.DebugLevel)
 	z.SetFormatter(&z)
 	z.SetOutput(&z)
@@ -99,8 +99,8 @@ func (z *ZLog) SetExitFunc(fn func(i int)) *ZLog {
 	return z
 }
 
-func (z *ZLog) SetBuildMode(buildMode string) *ZLog {
-	z.BuildMode = strings.ToLower(buildMode)
+func (z *ZLog) SetBuildMode(buildMode common.Mode) *ZLog {
+	z.BuildMode = buildMode
 	return z
 }
 
@@ -153,7 +153,7 @@ func (z *ZLog) SetScreen(screenEnable bool) *ZLog {
 }
 
 func (z *ZLog) Blue(msg string) {
-	if z.BuildMode == "rel" {
+	if z.BuildMode == common.REL {
 		color.Blue(msg)
 	} else {
 		fmt.Printf("\x1b[%dm"+msg+" \x1b[0m\n", 34)
@@ -167,7 +167,7 @@ func (z *ZLog) WithTag(tag string) *logrus.Entry {
 // Write implement the Output Writer interface
 func (z *ZLog) Write(p []byte) (n int, err error) {
 	if z.ScreenEnable {
-		if z.BuildMode == "rel" {
+		if z.BuildMode == common.REL {
 			n, err = color.New(z.levelColor[string(p[1])]).Println(string(p))
 		} else {
 			n, err = fmt.Printf("\x1b[%dm"+string(p)+" \x1b[0m\n", z.levelColor[string(p[1])])
