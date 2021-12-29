@@ -210,6 +210,7 @@ func (z *ZLog) Format(entry *logrus.Entry) ([]byte, error) {
 		fileLine = entry.Caller.Line
 	} else {
 		fileName = "pipe.writer"
+		entry.Level = logrus.WarnLevel
 	}
 	b.WriteString(fmt.Sprintf("[%s] %s [%s:%d] %s %s", LevelArray[entry.Level], entry.Time.Format("2006-01-02 15:04:05"), fileName, fileLine, entry.Message, params))
 	return b.Bytes(), nil
