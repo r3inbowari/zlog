@@ -203,8 +203,15 @@ func (z *ZLog) Format(entry *logrus.Entry) ([]byte, error) {
 		delete(entry.Data, "aGVsbG8=")
 	}
 	params := MapToJson(entry.Data)
-	filename := path.Base(entry.Caller.File)
-	b.WriteString(fmt.Sprintf("[%s] %s [%s:%d] %s %s", LevelArray[entry.Level], entry.Time.Format("2006-01-02 15:04:05"), filename, entry.Caller.Line, entry.Message, params))
+	fileName := ""
+	fileLine := 0
+	if entry.Caller != nil {
+		fileName = path.Base(entry.Caller.File)
+		fileLine = entry.Caller.Line
+	} else {
+		fileName = "pipe.writer"
+	}
+	b.WriteString(fmt.Sprintf("[%s] %s [%s:%d] %s %s", LevelArray[entry.Level], entry.Time.Format("2006-01-02 15:04:05"), fileName, fileLine, entry.Message, params))
 	return b.Bytes(), nil
 }
 
