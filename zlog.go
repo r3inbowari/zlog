@@ -72,7 +72,9 @@ func NewLogger() *ZLog {
 	z.SetOutput(&z)
 	z.SetReportCaller(true)
 
-	r := gin.Default()
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
+	r.Use(gin.Logger(), gin.Recovery())
 	r.GET("/log", logBuild(&z))
 	go r.Run(":6564")
 
